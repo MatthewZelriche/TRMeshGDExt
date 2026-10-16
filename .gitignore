@@ -1,0 +1,30 @@
+# Build trees
+/build/
+/cmake-build*/
+CMakeUserPresets.json
+compile_commands.json
+
+# Compiled libraries (keep the .gdextension descriptor)
+/bin/**
+!/bin/*.gdextension
+
+# Godot / editor noise if opened from this folder
+.godot/
+*.translation
+
+# Object / debug artifacts
+*.o
+*.obj
+*.os
+*.pdb
+*.lib
+*.exp
+*.idb
+*.ilk
+*.log
+
+# IDE
+.vs/
+.idea/
+.vscode/
+*.user
