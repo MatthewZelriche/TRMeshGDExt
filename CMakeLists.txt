@@ -46,7 +46,9 @@ target_sources(${LIBNAME}
 	PRIVATE
 		src/register_types.cpp
 		src/register_types.h
+		src/mesh/half_edge_mesh.cpp
 		src/mesh/half_edge_mesh.h
+		src/mesh/topology_data.hpp
 		src/trmesh_instance_3d.cpp
 		src/trmesh_instance_3d.h
 		src/utils/slot_map.hpp
