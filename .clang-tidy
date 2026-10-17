@@ -1,0 +1,31 @@
+---
+Checks: "*,
+        -abseil-*,
+        -altera-*,
+        -android-*,
+        -fuchsia-*,
+        -google-*,
+        -llvm*,
+        -zircon-*,
+        -cppcoreguidelines-pro-type-*,
+        -modernize-use-trailing-return-type,
+        -portability-avoid-pragma-once,
+        -modernize-use-nodiscard,
+        -readability-redundant-inline-specifier,
+        -bugprone-easily-swappable-parameters,
+        -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+        -cppcoreguidelines-avoid-const-or-ref-data-members,
+        -cppcoreguidelines-pro-bounds-avoid-unchecked-container-access,
+        -readability-identifier-length,
+        -readability-named-parameter,
+        -readability-redundant-parentheses,
+"
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+FormatStyle:     none
+
+CheckOptions:
+  - key: readability-identifier-length.IgnoredVariableNames
+    value: 'x|y|z'
+  - key: readability-identifier-length.IgnoredParameterNames
+    value: 'x|y|z'
