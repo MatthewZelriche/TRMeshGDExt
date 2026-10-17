@@ -45,7 +45,9 @@ template<typename T, typename... Rest>
 struct AreUnique<T, Rest...> :
     std::bool_constant<((!std::same_as<T, Rest>) && ...) && AreUnique<Rest...>::value> {};
 
-template<typename MapTag, typename... Columns>
+} // namespace slot_map_detail
+
+template<typename MapTag>
 class SlotHandle {
   public:
    using ValueType = std::uint64_t;
@@ -64,12 +66,10 @@ class SlotHandle {
    ValueType mValue = INVALID_VALUE;
 };
 
-} // namespace slot_map_detail
-
 // A packed structure-of-arrays slot map with amortized O(1) insertion, O(1)
 // removal and lookup, and contiguous storage for every column.
 // MapTag provides the map's identity and must precede one or more Col types.
-// Each distinct MapTag and column layout produces a distinct Handle type.
+// Each distinct MapTag produces a distinct Handle type.
 //
 // Pointers, references, spans and iterators are to be considered invalidated
 // after the following operations:
@@ -85,7 +85,7 @@ template<typename MapTag, typename... Columns>
 requires(sizeof...(Columns) > 0) && (slot_map_detail::ValidColumn<Columns> && ...)
 class SlotMap {
   public:
-   using Handle = slot_map_detail::SlotHandle<MapTag, Columns...>;
+   using Handle = SlotHandle<MapTag>;
    using SizeType = std::size_t;
 
    static constexpr SizeType COLUMN_COUNT = sizeof...(Columns);

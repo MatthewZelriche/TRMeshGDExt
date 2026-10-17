@@ -45,6 +45,7 @@ template<typename Handle>
 }
 
 static_assert(sizeof(IntMap::Handle) == 8);
+static_assert(std::same_as<IntMap::Handle, SlotHandle<IntMapTag>>);
 static_assert(SlotMapCompatible<IntMapTag, Col<int>>);
 static_assert(SlotMapCompatible<FirstMapTag, Col<int>>);
 static_assert(!SlotMapCompatible<Col<int>>);
@@ -52,7 +53,7 @@ static_assert(!SlotMapCompatible<int>);
 static_assert(!SlotMapCompatible<IntMapTag, int>);
 static_assert(!SlotMapCompatible<IntMapTag, Col<ThrowingMove>>);
 static_assert(!SlotMapCompatible<IntMapTag, Col<ThrowingDestructor>>);
-static_assert(!std::same_as<IntMap::Handle, SlotMap<IntMapTag, Col<float>>::Handle>);
+static_assert(std::same_as<IntMap::Handle, SlotMap<IntMapTag, Col<float>>::Handle>);
 static_assert(!std::same_as<FirstTaggedIntMap::Handle, SecondTaggedIntMap::Handle>);
 static_assert(AcceptsHandle<FirstTaggedIntMap, FirstTaggedIntMap::Handle>);
 static_assert(!AcceptsHandle<FirstTaggedIntMap, SecondTaggedIntMap::Handle>);

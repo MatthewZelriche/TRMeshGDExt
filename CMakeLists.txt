@@ -46,11 +46,13 @@ target_sources(${LIBNAME}
 	PRIVATE
 		src/register_types.cpp
 		src/register_types.h
-		src/trmesh.cpp
-		src/trmesh.h
+		src/mesh/half_edge_mesh.h
+		src/trmesh_instance_3d.cpp
+		src/trmesh_instance_3d.h
 		src/utils/slot_map.hpp
 )
 
+target_include_directories(${LIBNAME} PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(${LIBNAME} PRIVATE godot-cpp)
 
 set_target_properties(${LIBNAME}

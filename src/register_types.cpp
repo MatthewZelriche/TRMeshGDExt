@@ -1,6 +1,6 @@
 #include "register_types.h"
 
-#include "trmesh.h"
+#include "trmesh_instance_3d.h"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/defs.hpp>
@@ -12,7 +12,7 @@ void initialize_trmesh_module(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
-	GDREGISTER_CLASS(TRMesh);
+	GDREGISTER_CLASS(TRMeshInstance3D);
 }
 
 void uninitialize_trmesh_module(ModuleInitializationLevel p_level) {
