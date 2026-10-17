@@ -1,5 +1,5 @@
-# Match godot-cpp's CMake minimum (3.17 for emsdk / project include hooks).
-cmake_minimum_required(VERSION 3.17)
+# CMake 3.20 added support for requesting C++23.
+cmake_minimum_required(VERSION 3.20)
 
 # For clangd / Zed (Ninja generator). VS generators ignore this.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -48,13 +48,15 @@ target_sources(${LIBNAME}
 		src/register_types.h
 		src/trmesh.cpp
 		src/trmesh.h
+		src/utils/slot_map.hpp
 )
 
 target_link_libraries(${LIBNAME} PRIVATE godot-cpp)
 
 set_target_properties(${LIBNAME}
 	PROPERTIES
-		CXX_STANDARD 17
+		CXX_STANDARD 23
+		CXX_STANDARD_REQUIRED ON
 		CXX_EXTENSIONS OFF
 		# Generator expression avoids MSVC Debug/Release subdirectories.
 		LIBRARY_OUTPUT_DIRECTORY "$<1:${PROJECT_SOURCE_DIR}/bin/${GODOTCPP_PLATFORM}>"
@@ -63,3 +65,8 @@ set_target_properties(${LIBNAME}
 		PREFIX "lib"
 		OUTPUT_NAME "${LIBNAME}${GODOTCPP_SUFFIX}"
 )
+
+include(CTest)
+if(BUILD_TESTING)
+	add_subdirectory(tests)
+endif()
