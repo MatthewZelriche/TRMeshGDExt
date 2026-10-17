@@ -28,13 +28,36 @@ struct ThrowingDestructor {
    ~ThrowingDestructor() noexcept(false) {}
 };
 
-using IntMap = SlotMap<Col<int>>;
+struct IntMapTag {};
+struct FirstMapTag {};
+struct SecondMapTag {};
+
+using IntMap = SlotMap<IntMapTag, Col<int>>;
+using FirstTaggedIntMap = SlotMap<FirstMapTag, Col<int>>;
+using SecondTaggedIntMap = SlotMap<SecondMapTag, Col<int>>;
+
+template<typename Map, typename Handle>
+concept AcceptsHandle = requires(Map &map, Handle handle) { map.get(handle); };
+
+template<typename Handle>
+[[nodiscard]] constexpr std::uint64_t handle_value(Handle handle) noexcept {
+   return static_cast<std::uint64_t>(handle);
+}
 
 static_assert(sizeof(IntMap::Handle) == 8);
-static_assert(SlotMapCompatible<Col<int>>);
+static_assert(SlotMapCompatible<IntMapTag, Col<int>>);
+static_assert(SlotMapCompatible<FirstMapTag, Col<int>>);
+static_assert(!SlotMapCompatible<Col<int>>);
 static_assert(!SlotMapCompatible<int>);
-static_assert(!SlotMapCompatible<Col<ThrowingMove>>);
-static_assert(!SlotMapCompatible<Col<ThrowingDestructor>>);
+static_assert(!SlotMapCompatible<IntMapTag, int>);
+static_assert(!SlotMapCompatible<IntMapTag, Col<ThrowingMove>>);
+static_assert(!SlotMapCompatible<IntMapTag, Col<ThrowingDestructor>>);
+static_assert(!std::same_as<IntMap::Handle, SlotMap<IntMapTag, Col<float>>::Handle>);
+static_assert(!std::same_as<FirstTaggedIntMap::Handle, SecondTaggedIntMap::Handle>);
+static_assert(AcceptsHandle<FirstTaggedIntMap, FirstTaggedIntMap::Handle>);
+static_assert(!AcceptsHandle<FirstTaggedIntMap, SecondTaggedIntMap::Handle>);
+static_assert(!std::convertible_to<IntMap::Handle, std::uint64_t>);
+static_assert(std::constructible_from<IntMap::Handle, std::uint64_t>);
 
 struct Record {
    int id;
@@ -42,6 +65,8 @@ struct Record {
 
    Record(int pId, std::string pName) : id(pId), name(std::move(pName)) {}
 };
+
+struct RecordMapTag {};
 
 static_assert(std::is_nothrow_move_constructible_v<Record>);
 
@@ -81,6 +106,8 @@ struct Tracked {
    }
 };
 
+struct TrackedMapTag {};
+
 struct MoveConstructOnly {
    static inline int alive = 0;
 
@@ -98,6 +125,8 @@ struct MoveConstructOnly {
    ~MoveConstructOnly() { --alive; }
 };
 
+struct MoveConstructOnlyMapTag {};
+
 struct ThrowingConstructor {
    static inline bool shouldThrow = false;
 
@@ -110,6 +139,8 @@ struct ThrowingConstructor {
    ThrowingConstructor(ThrowingConstructor &&) noexcept = default;
 };
 
+struct ThrowingConstructorMapTag {};
+
 struct Position {
    int value = 0;
 };
@@ -120,13 +151,17 @@ struct Velocity {
 
 struct CurrentPositionTag {};
 struct PreviousPositionTag {};
+struct EntityMapTag {};
 
-using EntityMap =
-    SlotMap<Col<Position, CurrentPositionTag>, Col<Position, PreviousPositionTag>, Col<Velocity>>;
+using EntityMap = SlotMap<EntityMapTag, Col<Position, CurrentPositionTag>,
+                          Col<Position, PreviousPositionTag>, Col<Velocity>>;
 
 struct DefaultValue {
    int value = 42;
 };
+
+struct DefaultInsertionMapTag {};
+struct RollbackMapTag {};
 
 } // namespace
 
@@ -141,8 +176,29 @@ TEST_CASE("SlotMap starts empty", "[slot-map]") {
    CHECK(map.get(IntMap::INVALID_HANDLE) == nullptr);
 }
 
+TEST_CASE("SlotMap handles explicitly convert to and from uint64_t", "[slot-map]") {
+   IntMap map;
+   const auto handle = map.emplace(10);
+
+   CHECK(handle_value(handle) == 0);
+   CHECK(IntMap::Handle {handle_value(handle)} == handle);
+}
+
+TEST_CASE("Tagged SlotMaps expose distinct handle types", "[slot-map]") {
+   FirstTaggedIntMap firstMap;
+   SecondTaggedIntMap secondMap;
+
+   const auto first = firstMap.emplace(10);
+   const auto second = secondMap.emplace(20);
+
+   CHECK(handle_value(first) == 0);
+   CHECK(handle_value(second) == 0);
+   CHECK(firstMap[first] == 10);
+   CHECK(secondMap[second] == 20);
+}
+
 TEST_CASE("SlotMap emplace constructs one value per column", "[slot-map]") {
-   SlotMap<Col<Record>> map;
+   SlotMap<RecordMapTag, Col<Record>> map;
    const auto handle = map.emplace(Record {7, "seven"});
 
    REQUIRE(map.get(handle) != nullptr);
@@ -153,7 +209,7 @@ TEST_CASE("SlotMap emplace constructs one value per column", "[slot-map]") {
 TEST_CASE("SlotMap insert copies lvalues and moves rvalues", "[slot-map]") {
    Tracked::reset();
    {
-      SlotMap<Col<Tracked>> map;
+      SlotMap<TrackedMapTag, Col<Tracked>> map;
       map.reserve(2);
 
       Tracked copiedSource(10);
@@ -195,7 +251,7 @@ TEST_CASE("SlotMap removal keeps values dense and repairs mappings", "[slot-map]
 TEST_CASE("SlotMap removal supports values without move assignment", "[slot-map]") {
    MoveConstructOnly::alive = 0;
    {
-      SlotMap<Col<MoveConstructOnly>> map;
+      SlotMap<MoveConstructOnlyMapTag, Col<MoveConstructOnly>> map;
       map.reserve(3);
       const auto first = map.emplace(1);
       const auto middle = map.emplace(2);
@@ -246,7 +302,7 @@ TEST_CASE("SlotMap rejects invalid and already removed handles", "[slot-map]") {
    IntMap map;
    const auto handle = map.emplace(1);
 
-   CHECK_FALSE(map.remove(handle + 1));
+   CHECK_FALSE(map.remove(IntMap::Handle {handle_value(handle) + 1}));
    CHECK_FALSE(map.remove(IntMap::INVALID_HANDLE));
    REQUIRE(map.remove(handle));
    CHECK_FALSE(map.remove(handle));
@@ -271,19 +327,19 @@ TEST_CASE("SlotMap provides mutable and const single-column access", "[slot-map]
 TEST_CASE("SlotMap reserve and clear manage all storage", "[slot-map]") {
    Tracked::reset();
    {
-      SlotMap<Col<Tracked>> map(32);
+      SlotMap<TrackedMapTag, Col<Tracked>> map(32);
       CHECK(map.capacity() >= 32);
       const auto first = map.emplace(1);
       const auto second = map.emplace(2);
-      CHECK(first == 0);
-      CHECK(second == 1);
+      CHECK(handle_value(first) == 0);
+      CHECK(handle_value(second) == 1);
       CHECK(Tracked::alive == 2);
 
       map.clear();
       CHECK(map.empty());
       CHECK(map.slot_count() == 0);
       CHECK(Tracked::alive == 0);
-      CHECK(map.emplace(3) == 0);
+      CHECK(handle_value(map.emplace(3)) == 0);
    }
    CHECK(Tracked::alive == 0);
 }
@@ -301,7 +357,7 @@ TEST_CASE("SlotMap remains usable after moves", "[slot-map]") {
    IntMap moved(std::move(source));
    CHECK(source.empty());
    CHECK(source.slot_count() == 0);
-   CHECK(source.emplace(1) == 0);
+   CHECK(handle_value(source.emplace(1)) == 0);
    CHECK(moved[first] == 10);
    CHECK(moved[last] == 30);
    CHECK(firstPointer == moved.get(first));
@@ -310,7 +366,7 @@ TEST_CASE("SlotMap remains usable after moves", "[slot-map]") {
 
    IntMap assigned;
    const auto discarded = assigned.emplace(99);
-   CHECK(discarded == 0);
+   CHECK(handle_value(discarded) == 0);
 
    int *movedFirstPointer = moved.get(first);
    assigned = std::move(moved);
@@ -323,7 +379,7 @@ TEST_CASE("SlotMap remains usable after moves", "[slot-map]") {
 }
 
 TEST_CASE("SlotMap rolls back when single-column construction throws", "[slot-map]") {
-   SlotMap<Col<ThrowingConstructor>> map;
+   SlotMap<ThrowingConstructorMapTag, Col<ThrowingConstructor>> map;
    map.reserve(2);
    const auto retained = map.emplace(7);
 
@@ -395,7 +451,7 @@ TEST_CASE("SlotMap keeps every column synchronized during removal", "[slot-map][
 }
 
 TEST_CASE("SlotMap default insertion initializes every column", "[slot-map][soa]") {
-   SlotMap<Col<int>, Col<DefaultValue>> map;
+   SlotMap<DefaultInsertionMapTag, Col<int>, Col<DefaultValue>> map;
    const auto emplaced = map.emplace();
    const auto inserted = map.insert();
 
@@ -407,7 +463,7 @@ TEST_CASE("SlotMap default insertion initializes every column", "[slot-map][soa]
 
 TEST_CASE("SlotMap rolls back completed columns when later construction throws",
           "[slot-map][soa]") {
-   SlotMap<Col<int>, Col<ThrowingConstructor>> map;
+   SlotMap<RollbackMapTag, Col<int>, Col<ThrowingConstructor>> map;
    const auto retained = map.emplace(7, 70);
 
    ThrowingConstructor::shouldThrow = true;

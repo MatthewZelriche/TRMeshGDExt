@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cassert>
+#include <compare>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -44,10 +45,31 @@ template<typename T, typename... Rest>
 struct AreUnique<T, Rest...> :
     std::bool_constant<((!std::same_as<T, Rest>) && ...) && AreUnique<Rest...>::value> {};
 
+template<typename MapTag, typename... Columns>
+class SlotHandle {
+  public:
+   using ValueType = std::uint64_t;
+
+   static constexpr ValueType INVALID_VALUE = std::numeric_limits<ValueType>::max();
+
+   constexpr SlotHandle() noexcept = default;
+
+   explicit constexpr SlotHandle(ValueType value) noexcept : mValue(value) {}
+
+   [[nodiscard]] explicit constexpr operator ValueType() const noexcept { return mValue; }
+
+   constexpr auto operator<=>(const SlotHandle &) const noexcept = default;
+
+  private:
+   ValueType mValue = INVALID_VALUE;
+};
+
 } // namespace slot_map_detail
 
 // A packed structure-of-arrays slot map with amortized O(1) insertion, O(1)
 // removal and lookup, and contiguous storage for every column.
+// MapTag provides the map's identity and must precede one or more Col types.
+// Each distinct MapTag and column layout produces a distinct Handle type.
 //
 // Pointers, references, spans and iterators are to be considered invalidated
 // after the following operations:
@@ -59,15 +81,15 @@ struct AreUnique<T, Rest...> :
 //
 // Handles are intentionally not generation-counted. Consequently, a stale
 // handle can refer to a new row after its sparse slot is reused.
-template<typename... Columns>
+template<typename MapTag, typename... Columns>
 requires(sizeof...(Columns) > 0) && (slot_map_detail::ValidColumn<Columns> && ...)
 class SlotMap {
   public:
-   using Handle = std::uint64_t;
+   using Handle = slot_map_detail::SlotHandle<MapTag, Columns...>;
    using SizeType = std::size_t;
 
    static constexpr SizeType COLUMN_COUNT = sizeof...(Columns);
-   static constexpr Handle INVALID_HANDLE = std::numeric_limits<Handle>::max();
+   static constexpr Handle INVALID_HANDLE {Handle::INVALID_VALUE};
 
    template<SizeType Index>
    using ColumnType = std::tuple_element_t<Index, std::tuple<Columns...>>::Type;
@@ -135,10 +157,11 @@ class SlotMap {
    }
 
    [[nodiscard]] bool remove(Handle handle) noexcept {
-      const Handle sparse_entry = find_dense_index(handle);
-      if (sparse_entry == INVALID_HANDLE) { return false; }
+      const HandleValue sparse_entry = find_dense_index(handle);
+      if (sparse_entry == Handle::INVALID_VALUE) { return false; }
 
-      const SizeType sparse_index = to_index(handle);
+      const HandleValue handle_value = to_value(handle);
+      const SizeType sparse_index = to_index(handle_value);
       const SizeType dense_index = to_index(sparse_entry);
       const SizeType last_dense_index = size() - 1;
       assert(dense_index <= last_dense_index);
@@ -146,20 +169,20 @@ class SlotMap {
       if (dense_index != last_dense_index) {
          relocate_row(dense_index, last_dense_index, ColumnIndices {});
 
-         const Handle moved_handle = mDenseToSparse[last_dense_index];
+         const HandleValue moved_handle = mDenseToSparse[last_dense_index];
          mDenseToSparse[dense_index] = moved_handle;
-         mSparseToDense[to_index(moved_handle)] = static_cast<Handle>(dense_index);
+         mSparseToDense[to_index(moved_handle)] = static_cast<HandleValue>(dense_index);
       }
 
       pop_row(ColumnIndices {});
       mDenseToSparse.pop_back();
       mSparseToDense[sparse_index] = encode_free(mFreeHead);
-      mFreeHead = handle;
+      mFreeHead = handle_value;
       return true;
    }
 
    void reserve(SizeType capacity) {
-      if (static_cast<Handle>(capacity) > FREE_LIST_END) {
+      if (static_cast<HandleValue>(capacity) > FREE_LIST_END) {
          throw std::length_error("SlotMap capacity exceeds handle space");
       }
 
@@ -176,7 +199,7 @@ class SlotMap {
    }
 
    [[nodiscard]] bool contains(Handle handle) const noexcept {
-      return find_dense_index(handle) != INVALID_HANDLE;
+      return find_dense_index(handle) != Handle::INVALID_VALUE;
    }
 
    template<typename Tag>
@@ -206,32 +229,32 @@ class SlotMap {
    template<SizeType Index>
    requires(Index < COLUMN_COUNT)
    [[nodiscard]] ColumnType<Index> *get(Handle handle) noexcept {
-      const Handle dense_index = find_dense_index(handle);
-      if (dense_index == INVALID_HANDLE) { return nullptr; }
+      const HandleValue dense_index = find_dense_index(handle);
+      if (dense_index == Handle::INVALID_VALUE) { return nullptr; }
 
-      assert(dense_index < static_cast<Handle>(size()));
+      assert(dense_index < static_cast<HandleValue>(size()));
       return std::addressof(std::get<Index>(mDenseColumns)[to_index(dense_index)]);
    }
 
    template<SizeType Index>
    requires(Index < COLUMN_COUNT)
    [[nodiscard]] const ColumnType<Index> *get(Handle handle) const noexcept {
-      const Handle dense_index = find_dense_index(handle);
-      if (dense_index == INVALID_HANDLE) { return nullptr; }
+      const HandleValue dense_index = find_dense_index(handle);
+      if (dense_index == Handle::INVALID_VALUE) { return nullptr; }
 
-      assert(dense_index < static_cast<Handle>(size()));
+      assert(dense_index < static_cast<HandleValue>(size()));
       return std::addressof(std::get<Index>(mDenseColumns)[to_index(dense_index)]);
    }
 
    [[nodiscard]] auto row(Handle handle) noexcept {
-      const Handle dense_index = find_dense_index(handle);
-      assert(dense_index != INVALID_HANDLE);
+      const HandleValue dense_index = find_dense_index(handle);
+      assert(dense_index != Handle::INVALID_VALUE);
       return row_at(to_index(dense_index), ColumnIndices {});
    }
 
    [[nodiscard]] auto row(Handle handle) const noexcept {
-      const Handle dense_index = find_dense_index(handle);
-      assert(dense_index != INVALID_HANDLE);
+      const HandleValue dense_index = find_dense_index(handle);
+      assert(dense_index != Handle::INVALID_VALUE);
       return row_at(to_index(dense_index), ColumnIndices {});
    }
 
@@ -321,6 +344,7 @@ class SlotMap {
    }
 
   private:
+   using HandleValue = std::uint64_t;
    using ColumnTuple = std::tuple<Columns...>;
    using ColumnIndices = std::make_index_sequence<COLUMN_COUNT>;
 
@@ -331,28 +355,32 @@ class SlotMap {
 
    // mSparseToDense entries with FREE_BIT set contain an embedded freelist
    // link in their low bits. Active entries contain an untagged dense index.
-   static constexpr Handle FREE_BIT = Handle {1} << 63;
-   static constexpr Handle INDEX_MASK = FREE_BIT - 1;
-   static constexpr Handle FREE_LIST_END = INDEX_MASK;
+   static constexpr HandleValue FREE_BIT = HandleValue {1} << 63;
+   static constexpr HandleValue INDEX_MASK = FREE_BIT - 1;
+   static constexpr HandleValue FREE_LIST_END = INDEX_MASK;
 
    std::tuple<std::vector<typename Columns::Type>...> mDenseColumns;
-   std::vector<Handle> mDenseToSparse;
-   std::vector<Handle> mSparseToDense;
-   Handle mFreeHead = FREE_LIST_END;
+   std::vector<HandleValue> mDenseToSparse;
+   std::vector<HandleValue> mSparseToDense;
+   HandleValue mFreeHead = FREE_LIST_END;
 
-   [[nodiscard]] static constexpr bool is_free(Handle entry) noexcept {
+   [[nodiscard]] static constexpr bool is_free(HandleValue entry) noexcept {
       return (entry & FREE_BIT) != 0;
    }
 
-   [[nodiscard]] static constexpr Handle encode_free(Handle next) noexcept {
+   [[nodiscard]] static constexpr HandleValue encode_free(HandleValue next) noexcept {
       return FREE_BIT | next;
    }
 
-   [[nodiscard]] static constexpr Handle decode_free(Handle entry) noexcept {
+   [[nodiscard]] static constexpr HandleValue decode_free(HandleValue entry) noexcept {
       return entry & INDEX_MASK;
    }
 
-   [[nodiscard]] static constexpr SizeType to_index(Handle index) noexcept {
+   [[nodiscard]] static constexpr HandleValue to_value(Handle handle) noexcept {
+      return static_cast<HandleValue>(handle);
+   }
+
+   [[nodiscard]] static constexpr SizeType to_index(HandleValue index) noexcept {
       return static_cast<SizeType>(index);
    }
 
@@ -442,24 +470,24 @@ class SlotMap {
 
    // Updates the book-keeping information after inserting an entire row of dense values
    [[nodiscard]] Handle finish_insert(bool reuse_sparse_slot) noexcept {
-      const auto dense_index = static_cast<Handle>(size() - 1);
-      Handle handle = INVALID_HANDLE;
+      const auto dense_index = static_cast<HandleValue>(size() - 1);
+      HandleValue handle = Handle::INVALID_VALUE;
 
       if (reuse_sparse_slot) {
          handle = mFreeHead;
 
-         const Handle free_entry = mSparseToDense[to_index(handle)];
+         const HandleValue free_entry = mSparseToDense[to_index(handle)];
          assert(is_free(free_entry));
 
          mFreeHead = decode_free(free_entry);
          mSparseToDense[to_index(handle)] = dense_index;
       } else {
-         handle = static_cast<Handle>(mSparseToDense.size());
+         handle = static_cast<HandleValue>(mSparseToDense.size());
          mSparseToDense.push_back(dense_index);
       }
 
       mDenseToSparse.push_back(handle);
-      return handle;
+      return Handle {handle};
    }
 
    // Moves source into destination. Similar to the first half of a swap & pop,
@@ -495,11 +523,14 @@ class SlotMap {
       (std::get<Indices>(mDenseColumns).clear(), ...);
    }
 
-   [[nodiscard]] Handle find_dense_index(Handle handle) const noexcept {
-      if (handle >= static_cast<Handle>(mSparseToDense.size())) { return INVALID_HANDLE; }
+   [[nodiscard]] HandleValue find_dense_index(Handle handle) const noexcept {
+      const HandleValue handle_value = to_value(handle);
+      if (handle_value >= static_cast<HandleValue>(mSparseToDense.size())) {
+         return Handle::INVALID_VALUE;
+      }
 
-      const Handle sparse_entry = mSparseToDense[to_index(handle)];
-      return is_free(sparse_entry) ? INVALID_HANDLE : sparse_entry;
+      const HandleValue sparse_entry = mSparseToDense[to_index(handle_value)];
+      return is_free(sparse_entry) ? Handle::INVALID_VALUE : sparse_entry;
    }
 
    template<SizeType... Indices>
