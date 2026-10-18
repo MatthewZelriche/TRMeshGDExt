@@ -58,7 +58,7 @@ class SlotHandle {
 
    explicit constexpr SlotHandle(ValueType value) noexcept : mValue(value) {}
 
-   [[nodiscard]] explicit constexpr operator ValueType() const noexcept { return mValue; }
+   explicit constexpr operator ValueType() const noexcept { return mValue; }
 
    constexpr auto operator<=>(const SlotHandle &) const noexcept = default;
 
@@ -198,29 +198,29 @@ class SlotMap {
       mFreeHead = FREE_LIST_END;
    }
 
-   [[nodiscard]] bool contains(Handle handle) const noexcept {
+   bool contains(Handle handle) const noexcept {
       return find_dense_index(handle) != Handle::INVALID_VALUE;
    }
 
    template<typename Tag>
    requires slot_map_detail::HasTag<Tag, Columns...>
-   [[nodiscard]] auto *get(Handle handle) noexcept {
+   auto *get(Handle handle) noexcept {
       return get<tag_index<Tag>()>(handle);
    }
 
    template<typename Tag>
    requires slot_map_detail::HasTag<Tag, Columns...>
-   [[nodiscard]] const auto *get(Handle handle) const noexcept {
+   const auto *get(Handle handle) const noexcept {
       return get<tag_index<Tag>()>(handle);
    }
 
-   [[nodiscard]] ColumnType<0> *get(Handle handle) noexcept
+   ColumnType<0> *get(Handle handle) noexcept
    requires(COLUMN_COUNT == 1)
    {
       return get<0>(handle);
    }
 
-   [[nodiscard]] const ColumnType<0> *get(Handle handle) const noexcept
+   const ColumnType<0> *get(Handle handle) const noexcept
    requires(COLUMN_COUNT == 1)
    {
       return get<0>(handle);
@@ -228,7 +228,7 @@ class SlotMap {
 
    template<SizeType Index>
    requires(Index < COLUMN_COUNT)
-   [[nodiscard]] ColumnType<Index> *get(Handle handle) noexcept {
+   ColumnType<Index> *get(Handle handle) noexcept {
       const HandleValue dense_index = find_dense_index(handle);
       if (dense_index == Handle::INVALID_VALUE) { return nullptr; }
 
@@ -238,7 +238,7 @@ class SlotMap {
 
    template<SizeType Index>
    requires(Index < COLUMN_COUNT)
-   [[nodiscard]] const ColumnType<Index> *get(Handle handle) const noexcept {
+   const ColumnType<Index> *get(Handle handle) const noexcept {
       const HandleValue dense_index = find_dense_index(handle);
       if (dense_index == Handle::INVALID_VALUE) { return nullptr; }
 
@@ -246,13 +246,13 @@ class SlotMap {
       return std::addressof(std::get<Index>(mDenseColumns)[to_index(dense_index)]);
    }
 
-   [[nodiscard]] auto row(Handle handle) noexcept {
+   auto row(Handle handle) noexcept {
       const HandleValue dense_index = find_dense_index(handle);
       assert(dense_index != Handle::INVALID_VALUE);
       return row_at(to_index(dense_index), ColumnIndices {});
    }
 
-   [[nodiscard]] auto row(Handle handle) const noexcept {
+   auto row(Handle handle) const noexcept {
       const HandleValue dense_index = find_dense_index(handle);
       assert(dense_index != Handle::INVALID_VALUE);
       return row_at(to_index(dense_index), ColumnIndices {});
@@ -274,12 +274,12 @@ class SlotMap {
       return *get<0>(handle);
    }
 
-   [[nodiscard]] bool empty() const noexcept { return std::get<0>(mDenseColumns).empty(); }
+   bool empty() const noexcept { return std::get<0>(mDenseColumns).empty(); }
 
-   [[nodiscard]] SizeType size() const noexcept { return std::get<0>(mDenseColumns).size(); }
+   SizeType size() const noexcept { return std::get<0>(mDenseColumns).size(); }
 
    // Returns the capacity shared by every column (the smallest column capacity).
-   [[nodiscard]] SizeType capacity() const noexcept {
+   SizeType capacity() const noexcept {
       SizeType result = std::get<0>(mDenseColumns).capacity();
       std::apply(
           [&result](const auto &...columns) {
@@ -289,43 +289,43 @@ class SlotMap {
       return result;
    }
 
-   [[nodiscard]] SizeType slot_count() const noexcept { return mSparseToDense.size(); }
+   SizeType slot_count() const noexcept { return mSparseToDense.size(); }
 
-   [[nodiscard]] auto columns() noexcept { return column_spans(ColumnIndices {}); }
+   auto columns() noexcept { return column_spans(ColumnIndices {}); }
 
-   [[nodiscard]] auto columns() const noexcept { return column_spans(ColumnIndices {}); }
+   auto columns() const noexcept { return column_spans(ColumnIndices {}); }
 
    template<typename Tag>
    requires slot_map_detail::HasTag<Tag, Columns...>
-   [[nodiscard]] auto column() noexcept {
+   auto column() noexcept {
       return column<tag_index<Tag>()>();
    }
 
    template<typename Tag>
    requires slot_map_detail::HasTag<Tag, Columns...>
-   [[nodiscard]] auto column() const noexcept {
+   auto column() const noexcept {
       return column<tag_index<Tag>()>();
    }
 
-   [[nodiscard]] ColumnType<0> *data() noexcept
+   ColumnType<0> *data() noexcept
    requires(COLUMN_COUNT == 1)
    {
       return std::get<0>(mDenseColumns).data();
    }
 
-   [[nodiscard]] const ColumnType<0> *data() const noexcept
+   const ColumnType<0> *data() const noexcept
    requires(COLUMN_COUNT == 1)
    {
       return std::get<0>(mDenseColumns).data();
    }
 
-   [[nodiscard]] std::span<ColumnType<0>> values() noexcept
+   std::span<ColumnType<0>> values() noexcept
    requires(COLUMN_COUNT == 1)
    {
       return column<0>();
    }
 
-   [[nodiscard]] std::span<const ColumnType<0>> values() const noexcept
+   std::span<const ColumnType<0>> values() const noexcept
    requires(COLUMN_COUNT == 1)
    {
       return column<0>();
@@ -333,13 +333,13 @@ class SlotMap {
 
    template<SizeType Index>
    requires(Index < COLUMN_COUNT)
-   [[nodiscard]] std::span<ColumnType<Index>> column() noexcept {
+   std::span<ColumnType<Index>> column() noexcept {
       return std::get<Index>(mDenseColumns);
    }
 
    template<SizeType Index>
    requires(Index < COLUMN_COUNT)
-   [[nodiscard]] std::span<const ColumnType<Index>> column() const noexcept {
+   std::span<const ColumnType<Index>> column() const noexcept {
       return std::get<Index>(mDenseColumns);
    }
 
@@ -364,28 +364,28 @@ class SlotMap {
    std::vector<HandleValue> mSparseToDense;
    HandleValue mFreeHead = FREE_LIST_END;
 
-   [[nodiscard]] static constexpr bool is_free(HandleValue entry) noexcept {
+   static constexpr bool is_free(HandleValue entry) noexcept {
       return (entry & FREE_BIT) != 0;
    }
 
-   [[nodiscard]] static constexpr HandleValue encode_free(HandleValue next) noexcept {
+   static constexpr HandleValue encode_free(HandleValue next) noexcept {
       return FREE_BIT | next;
    }
 
-   [[nodiscard]] static constexpr HandleValue decode_free(HandleValue entry) noexcept {
+   static constexpr HandleValue decode_free(HandleValue entry) noexcept {
       return entry & INDEX_MASK;
    }
 
-   [[nodiscard]] static constexpr HandleValue to_value(Handle handle) noexcept {
+   static constexpr HandleValue to_value(Handle handle) noexcept {
       return static_cast<HandleValue>(handle);
    }
 
-   [[nodiscard]] static constexpr SizeType to_index(HandleValue index) noexcept {
+   static constexpr SizeType to_index(HandleValue index) noexcept {
       return static_cast<SizeType>(index);
    }
 
    template<typename Tag, SizeType Index = 0>
-   [[nodiscard]] static consteval SizeType tag_index() {
+   static consteval SizeType tag_index() {
       if constexpr (Index == COLUMN_COUNT) {
          return COLUMN_COUNT;
       } else if constexpr (std::same_as<Tag,
@@ -451,7 +451,7 @@ class SlotMap {
    }
 
    template<typename Tuple, SizeType... Indices>
-   [[nodiscard]] static consteval bool row_constructible(std::index_sequence<Indices...>) {
+   static consteval bool row_constructible(std::index_sequence<Indices...>) {
       return (std::constructible_from<ColumnType<Indices>,
                                       decltype(std::get<Indices>(std::declval<Tuple &&>()))> &&
               ...);
@@ -460,7 +460,7 @@ class SlotMap {
    // Ensures at compile time that the types of provided values to insert and emplace
    // can actually be used to construct that row. Simply for producing cleaner compile errors
    template<typename... Values>
-   [[nodiscard]] static consteval bool row_constructible() {
+   static consteval bool row_constructible() {
       if constexpr (sizeof...(Values) != COLUMN_COUNT) {
          return false;
       } else {
@@ -523,7 +523,7 @@ class SlotMap {
       (std::get<Indices>(mDenseColumns).clear(), ...);
    }
 
-   [[nodiscard]] HandleValue find_dense_index(Handle handle) const noexcept {
+   HandleValue find_dense_index(Handle handle) const noexcept {
       const HandleValue handle_value = to_value(handle);
       if (handle_value >= static_cast<HandleValue>(mSparseToDense.size())) {
          return Handle::INVALID_VALUE;
@@ -534,22 +534,22 @@ class SlotMap {
    }
 
    template<SizeType... Indices>
-   [[nodiscard]] auto row_at(SizeType dense_index, std::index_sequence<Indices...>) noexcept {
+   auto row_at(SizeType dense_index, std::index_sequence<Indices...>) noexcept {
       return std::forward_as_tuple(std::get<Indices>(mDenseColumns)[dense_index]...);
    }
 
    template<SizeType... Indices>
-   [[nodiscard]] auto row_at(SizeType dense_index, std::index_sequence<Indices...>) const noexcept {
+   auto row_at(SizeType dense_index, std::index_sequence<Indices...>) const noexcept {
       return std::forward_as_tuple(std::get<Indices>(mDenseColumns)[dense_index]...);
    }
 
    template<SizeType... Indices>
-   [[nodiscard]] auto column_spans(std::index_sequence<Indices...>) noexcept {
+   auto column_spans(std::index_sequence<Indices...>) noexcept {
       return std::tuple {std::span<ColumnType<Indices>>(std::get<Indices>(mDenseColumns))...};
    }
 
    template<SizeType... Indices>
-   [[nodiscard]] auto column_spans(std::index_sequence<Indices...>) const noexcept {
+   auto column_spans(std::index_sequence<Indices...>) const noexcept {
       return std::tuple {std::span<const ColumnType<Indices>>(std::get<Indices>(mDenseColumns))...};
    }
 };

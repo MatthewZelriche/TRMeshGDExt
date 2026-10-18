@@ -7,6 +7,8 @@
 // Engine-independent half-edge mesh storage.
 class HalfEdgeMesh {
   public:
+   class HalfEdgesAroundVertexView;
+
    [[nodiscard]] VertexHandle add_vertex(const godot::Vector3 &position) {
       return mVertices.emplace(Vertex(), position);
    }
@@ -15,6 +17,8 @@ class HalfEdgeMesh {
                                      std::span<const godot::Vector2> corner_uvs);
 
    [[nodiscard]] FaceHandle add_face(std::span<const VertexHandle> vertices);
+
+   HalfEdgesAroundVertexView half_edges(VertexHandle vertex) const noexcept;
 
    inline godot::Vector3 *position(VertexHandle vertex) noexcept {
       return mVertices.get<VertexPositionTag>(vertex);
@@ -37,3 +41,5 @@ class HalfEdgeMesh {
    HalfEdgeMap mHalfEdges;
    FaceMap mFaces;
 };
+
+#include "mesh/topology_iterators.hpp"

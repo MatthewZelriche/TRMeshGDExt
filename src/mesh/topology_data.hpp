@@ -1,9 +1,9 @@
 #pragma once
 
-#include "utils/slot_map.hpp"
-
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector3.hpp>
+
+#include "utils/slot_map.hpp"
 
 struct VertexMapTag {};
 struct HalfEdgeMapTag {};

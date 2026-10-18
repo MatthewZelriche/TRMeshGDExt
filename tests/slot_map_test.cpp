@@ -40,7 +40,7 @@ template<typename Map, typename Handle>
 concept AcceptsHandle = requires(Map &map, Handle handle) { map.get(handle); };
 
 template<typename Handle>
-[[nodiscard]] constexpr std::uint64_t handle_value(Handle handle) noexcept {
+constexpr std::uint64_t handle_value(Handle handle) noexcept {
    return static_cast<std::uint64_t>(handle);
 }
 

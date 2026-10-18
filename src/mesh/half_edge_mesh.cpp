@@ -10,3 +10,8 @@ FaceHandle HalfEdgeMesh::add_face(std::span<const VertexHandle> vertices) {
    // TODO: Generate corner UVs and construct the face and its half-edge topology.
    return {};
 }
+
+HalfEdgeMesh::HalfEdgesAroundVertexView HalfEdgeMesh::half_edges(
+    VertexHandle vertex) const noexcept {
+   return {this, vertex};
+}

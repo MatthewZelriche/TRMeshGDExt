@@ -48,9 +48,11 @@ target_sources(${LIBNAME}
 		src/register_types.h
 		src/mesh/half_edge_mesh.cpp
 		src/mesh/half_edge_mesh.h
+		src/mesh/topology_iterators.hpp
 		src/mesh/topology_data.hpp
 		src/trmesh_instance_3d.cpp
 		src/trmesh_instance_3d.h
+		src/utils/bump_allocator.hpp
 		src/utils/slot_map.hpp
 )
 
