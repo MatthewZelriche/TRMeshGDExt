@@ -8,9 +8,16 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(Catch2)
 
-add_executable(trmesh_slot_map_tests bump_allocator_test.cpp slot_map_test.cpp)
+add_executable(
+	trmesh_slot_map_tests
+	bump_allocator_test.cpp
+	half_edge_mesh_test.cpp
+	slot_map_test.cpp
+	../src/mesh/half_edge_mesh.cpp
+	../src/mesh/utils/face_builder.cpp
+)
 target_include_directories(trmesh_slot_map_tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(trmesh_slot_map_tests PRIVATE Catch2::Catch2WithMain)
+target_link_libraries(trmesh_slot_map_tests PRIVATE Catch2::Catch2WithMain godot-cpp)
 
 set_target_properties(trmesh_slot_map_tests
 	PROPERTIES

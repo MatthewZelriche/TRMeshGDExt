@@ -13,9 +13,9 @@
 #include <vector>
 
 // An allocation arena made from stable, geometrically grown blocks.
-// Individual allocations cannot be freed. restore() partially rewinds the
-// arena, while reset() invalidates every allocation and retains its blocks for
-// reuse.
+// Individual allocations cannot be freed. Scoped checkpoints partially rewind
+// the arena, while reset() invalidates every allocation and retains its blocks
+// for reuse.
 //
 // Objects and spans are value-initialized before being returned. Their element
 // types must be trivially destructible because rewinding does not invoke
@@ -23,13 +23,29 @@
 class BumpAllocator {
   public:
    class Checkpoint {
+     public:
+      Checkpoint(const Checkpoint &) = delete;
+      Checkpoint &operator=(const Checkpoint &) = delete;
+      Checkpoint(Checkpoint &&other) noexcept;
+      Checkpoint &operator=(Checkpoint &&other) = delete;
+      ~Checkpoint() noexcept;
+
+      // Keeps allocations made since this checkpoint instead of restoring it.
+      void dismiss() noexcept { mAllocator = nullptr; }
+
      private:
       friend class BumpAllocator;
 
-      Checkpoint(std::size_t block, std::size_t offset) noexcept : mBlock(block), mOffset(offset) {}
+      Checkpoint(BumpAllocator &allocator, std::size_t block, std::size_t offset,
+                 std::size_t generation) noexcept :
+          mAllocator(&allocator), mBlock(block), mOffset(offset), mGeneration(generation) {}
 
+      void restore() noexcept;
+
+      BumpAllocator *mAllocator = nullptr;
       std::size_t mBlock;
       std::size_t mOffset;
+      std::size_t mGeneration;
    };
 
    static constexpr std::size_t MIN_BLOCK_BYTES = 4096;
@@ -47,10 +63,13 @@ class BumpAllocator {
        mBlocks(std::move(other.mBlocks)), mMinimumBlockBytes(other.mMinimumBlockBytes),
        mCurrentBlock(std::exchange(other.mCurrentBlock, 0)) {
       other.mBlocks.clear();
+      other.invalidate_checkpoints();
    }
 
    BumpAllocator &operator=(BumpAllocator &&other) noexcept {
       if (this != &other) {
+         invalidate_checkpoints();
+         other.invalidate_checkpoints();
          mBlocks = std::move(other.mBlocks);
          mMinimumBlockBytes = other.mMinimumBlockBytes;
          mCurrentBlock = std::exchange(other.mCurrentBlock, 0);
@@ -93,46 +112,35 @@ class BumpAllocator {
          throw std::bad_array_new_length();
       }
 
-      const Checkpoint saved = checkpoint();
-      try {
-         void *storage = allocate_bytes(count * sizeof(T), alignof(T));
-         T *elements = static_cast<T *>(storage);
-         std::uninitialized_value_construct_n(elements, count);
-         return {elements, count};
-      } catch (...) {
-         restore(saved);
-         throw;
-      }
+      // Checkpoint to restore in the case of constructor throwing
+      Checkpoint saved = checkpoint();
+      void *storage = allocate_bytes(count * sizeof(T), alignof(T));
+      T *elements = static_cast<T *>(storage);
+      std::uninitialized_value_construct_n(elements, count);
+      saved.dismiss();
+      return {elements, count};
    }
 
-   // A checkpoint remains applicable to this arena after it is moved. reset(),
-   // release(), or restoring an earlier checkpoint invalidates later checkpoints.
-   Checkpoint checkpoint() const noexcept {
-      if (mCurrentBlock == 0) { return {0, 0}; }
+   // Automatically restores this allocation position when the guard leaves
+   // scope. Nested checkpoints must be destroyed in LIFO order. A checkpoint
+   // must not outlive its allocator. Moving, resetting, or releasing the
+   // allocator invalidates its active checkpoints, whose destructors then do
+   // nothing.
+   Checkpoint checkpoint() noexcept {
+      if (mCurrentBlock == 0) { return {*this, 0, 0, mCheckpointGeneration}; }
 
       assert(mCurrentBlock <= mBlocks.size());
-      return {mCurrentBlock, mBlocks[mCurrentBlock - 1].offset};
-   }
-
-   void restore(Checkpoint saved) noexcept {
-      assert(saved.mBlock <= mBlocks.size());
-      assert(saved.mBlock < mCurrentBlock ||
-             (saved.mBlock == mCurrentBlock && saved.mOffset <= current_offset()));
-
-      if (saved.mBlock > 0) { mBlocks[saved.mBlock - 1].offset = saved.mOffset; }
-
-      for (std::size_t block = saved.mBlock; block < mBlocks.size(); ++block) {
-         mBlocks[block].offset = 0;
-      }
-      mCurrentBlock = saved.mBlock;
+      return {*this, mCurrentBlock, mBlocks[mCurrentBlock - 1].offset, mCheckpointGeneration};
    }
 
    void reset() noexcept {
+      invalidate_checkpoints();
       for (Block &block : mBlocks) { block.offset = 0; }
       mCurrentBlock = 0;
    }
 
    void release() noexcept {
+      invalidate_checkpoints();
       std::vector<Block>().swap(mBlocks);
       mCurrentBlock = 0;
    }
@@ -202,7 +210,34 @@ class BumpAllocator {
       return mBlocks[mCurrentBlock - 1].offset;
    }
 
+   void restore_to(std::size_t block, std::size_t offset) noexcept {
+      assert(block <= mBlocks.size());
+      assert(block < mCurrentBlock || (block == mCurrentBlock && offset <= current_offset()));
+
+      if (block > 0) { mBlocks[block - 1].offset = offset; }
+
+      for (std::size_t index = block; index < mBlocks.size(); ++index) {
+         mBlocks[index].offset = 0;
+      }
+      mCurrentBlock = block;
+   }
+
+   void invalidate_checkpoints() noexcept { ++mCheckpointGeneration; }
+
    std::vector<Block> mBlocks;
    std::size_t mMinimumBlockBytes;
    std::size_t mCurrentBlock = 0;
+   std::size_t mCheckpointGeneration = 0;
 };
+
+inline BumpAllocator::Checkpoint::Checkpoint(Checkpoint &&other) noexcept :
+    mAllocator(std::exchange(other.mAllocator, nullptr)), mBlock(other.mBlock),
+    mOffset(other.mOffset), mGeneration(other.mGeneration) {}
+
+inline BumpAllocator::Checkpoint::~Checkpoint() noexcept { restore(); }
+
+inline void BumpAllocator::Checkpoint::restore() noexcept {
+   BumpAllocator *allocator = std::exchange(mAllocator, nullptr);
+   if (allocator == nullptr || allocator->mCheckpointGeneration != mGeneration) { return; }
+   allocator->restore_to(mBlock, mOffset);
+}

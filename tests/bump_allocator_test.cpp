@@ -35,6 +35,8 @@ static_assert(std::is_trivially_destructible_v<OverAlignedValue>);
 static_assert(std::is_trivially_destructible_v<ThrowingDefault>);
 static_assert(std::is_nothrow_move_constructible_v<BumpAllocator>);
 static_assert(std::is_nothrow_move_assignable_v<BumpAllocator>);
+static_assert(!std::is_copy_constructible_v<BumpAllocator::Checkpoint>);
+static_assert(std::is_nothrow_move_constructible_v<BumpAllocator::Checkpoint>);
 
 } // namespace
 
@@ -86,12 +88,12 @@ TEST_CASE("BumpAllocator restores a checkpoint without releasing its blocks") {
 
    const auto retained = allocator.allocate_span<std::uint64_t>(2);
    retained[0] = 11;
-   const auto saved = allocator.checkpoint();
-
-   const auto temporary = allocator.allocate_span<std::uint64_t>(4);
-   const auto *temporary_address = temporary.data();
-
-   allocator.restore(saved);
+   const std::uint64_t *temporary_address = nullptr;
+   {
+      auto saved = allocator.checkpoint();
+      const auto temporary = allocator.allocate_span<std::uint64_t>(4);
+      temporary_address = temporary.data();
+   }
 
    const auto replacement = allocator.allocate_span<std::uint64_t>(4);
    REQUIRE(replacement.data() == temporary_address);
@@ -103,17 +105,71 @@ TEST_CASE("BumpAllocator moves without relocating existing allocations") {
 
    const auto retained = source.allocate_span<std::uint64_t>(2);
    retained[0] = 17;
-   const auto saved = source.checkpoint();
    const auto temporary = source.allocate_span<std::uint64_t>(4);
    const auto *temporary_address = temporary.data();
+   temporary[0] = 23;
 
    BumpAllocator destination(std::move(source));
 
    REQUIRE(retained[0] == 17);
-   destination.restore(saved);
-   REQUIRE(destination.allocate_span<std::uint64_t>(4).data() == temporary_address);
+   REQUIRE(temporary.data() == temporary_address);
+   REQUIRE(temporary[0] == 23);
 
    REQUIRE(source.allocate_span<std::uint64_t>(1)[0] == 0);
+}
+
+TEST_CASE("BumpAllocator checkpoint dismissal keeps later allocations") {
+   BumpAllocator allocator(64);
+   const auto first = allocator.allocate_span<std::uint64_t>(1);
+
+   {
+      auto saved = allocator.checkpoint();
+      const auto retained = allocator.allocate_span<std::uint64_t>(1);
+      retained[0] = 29;
+      saved.dismiss();
+   }
+
+   const auto next = allocator.allocate_span<std::uint64_t>(1);
+   REQUIRE(next.data() == first.data() + 2);
+}
+
+TEST_CASE("BumpAllocator invalidates active checkpoints when moved") {
+   BumpAllocator source(64);
+   BumpAllocator destination(64);
+   const auto retained = source.allocate_span<std::uint64_t>(1);
+   retained[0] = 31;
+
+   {
+      auto saved = source.checkpoint();
+      const auto temporary = source.allocate_span<std::uint64_t>(1);
+      temporary[0] = 37;
+      destination = std::move(source);
+   }
+
+   REQUIRE(retained[0] == 31);
+   REQUIRE(destination.allocate_span<std::uint64_t>(1).data() == retained.data() + 2);
+}
+
+TEST_CASE("BumpAllocator supports nested scoped checkpoints") {
+   BumpAllocator allocator(64);
+   const auto retained = allocator.allocate_span<std::uint64_t>(1);
+   const std::uint64_t *outer_address = nullptr;
+   const std::uint64_t *inner_address = nullptr;
+
+   {
+      auto outer = allocator.checkpoint();
+      outer_address = allocator.allocate_span<std::uint64_t>(1).data();
+
+      {
+         auto inner = allocator.checkpoint();
+         inner_address = allocator.allocate_span<std::uint64_t>(1).data();
+      }
+
+      REQUIRE(allocator.allocate_span<std::uint64_t>(1).data() == inner_address);
+   }
+
+   REQUIRE(allocator.allocate_span<std::uint64_t>(1).data() == outer_address);
+   REQUIRE(retained.data() + 1 == outer_address);
 }
 
 TEST_CASE("BumpAllocator rewinds when element construction throws") {

@@ -345,6 +345,20 @@ TEST_CASE("SlotMap reserve and clear manage all storage", "[slot-map]") {
    CHECK(Tracked::alive == 0);
 }
 
+TEST_CASE("SlotMap ensure_capacity grows geometrically", "[slot-map]") {
+   IntMap map;
+   map.reserve(4);
+   const std::size_t initialCapacity = map.capacity();
+   REQUIRE(initialCapacity >= 4);
+
+   map.ensure_capacity(initialCapacity + 1);
+   CHECK(map.capacity() >= initialCapacity + initialCapacity / 2);
+
+   const std::size_t grownCapacity = map.capacity();
+   map.ensure_capacity(grownCapacity);
+   CHECK(map.capacity() == grownCapacity);
+}
+
 TEST_CASE("SlotMap remains usable after moves", "[slot-map]") {
    IntMap source;
    const auto first = source.emplace(10);

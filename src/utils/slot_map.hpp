@@ -191,6 +191,20 @@ class SlotMap {
       mSparseToDense.reserve(capacity);
    }
 
+   // Ensures room for the requested number of rows, growing geometrically to
+   // avoid repeated exact-size reservations
+   void ensure_capacity(SizeType required) {
+      const SizeType current = capacity();
+      if (required <= current) { return; }
+
+      const auto maximum = static_cast<SizeType>(FREE_LIST_END);
+      if (required > maximum) { throw std::length_error("SlotMap capacity exceeds handle space"); }
+
+      const SizeType half = current / 2;
+      const SizeType geometric = current > maximum - half ? maximum : current + half;
+      reserve(std::max(required, geometric));
+   }
+
    void clear() noexcept {
       clear_columns(ColumnIndices {});
       mDenseToSparse.clear();
@@ -278,7 +292,7 @@ class SlotMap {
 
    SizeType size() const noexcept { return std::get<0>(mDenseColumns).size(); }
 
-   // Returns the capacity shared by every column (the smallest column capacity).
+   // Returns the row capacity shared by every backing vector.
    SizeType capacity() const noexcept {
       SizeType result = std::get<0>(mDenseColumns).capacity();
       std::apply(
@@ -286,6 +300,8 @@ class SlotMap {
              ((result = result < columns.capacity() ? result : columns.capacity()), ...);
           },
           mDenseColumns);
+      result = std::min(result, mDenseToSparse.capacity());
+      result = std::min(result, mSparseToDense.capacity());
       return result;
    }
 
@@ -364,13 +380,9 @@ class SlotMap {
    std::vector<HandleValue> mSparseToDense;
    HandleValue mFreeHead = FREE_LIST_END;
 
-   static constexpr bool is_free(HandleValue entry) noexcept {
-      return (entry & FREE_BIT) != 0;
-   }
+   static constexpr bool is_free(HandleValue entry) noexcept { return (entry & FREE_BIT) != 0; }
 
-   static constexpr HandleValue encode_free(HandleValue next) noexcept {
-      return FREE_BIT | next;
-   }
+   static constexpr HandleValue encode_free(HandleValue next) noexcept { return FREE_BIT | next; }
 
    static constexpr HandleValue decode_free(HandleValue entry) noexcept {
       return entry & INDEX_MASK;

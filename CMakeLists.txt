@@ -50,6 +50,8 @@ target_sources(${LIBNAME}
 		src/mesh/half_edge_mesh.h
 		src/mesh/topology_iterators.hpp
 		src/mesh/topology_data.hpp
+		src/mesh/utils/face_builder.cpp
+		src/mesh/utils/face_builder.h
 		src/trmesh_instance_3d.cpp
 		src/trmesh_instance_3d.h
 		src/utils/bump_allocator.hpp
