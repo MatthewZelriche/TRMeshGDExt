@@ -12,8 +12,11 @@ add_executable(
 	trmesh_slot_map_tests
 	bump_allocator_test.cpp
 	half_edge_mesh_test.cpp
+	mesh_recording_test.cpp
+	slot_map_recording_test.cpp
 	slot_map_test.cpp
 	../src/mesh/half_edge_mesh.cpp
+	../src/mesh/mesh_recording.cpp
 	../src/mesh/utils/face_builder.cpp
 )
 target_include_directories(trmesh_slot_map_tests PRIVATE "${PROJECT_SOURCE_DIR}/src")

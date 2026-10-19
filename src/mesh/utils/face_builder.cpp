@@ -11,7 +11,8 @@
 
 FaceBuilder::FaceBuilder(HalfEdgeMesh &mesh, std::span<const VertexHandle> vertices,
                          std::span<const godot::Vector2> corner_uvs) noexcept :
-    mMesh(mesh), mVertices(vertices), mCornerUvs(corner_uvs) {}
+    mMesh(mesh),
+    mVertices(vertices), mCornerUvs(corner_uvs) {}
 
 FaceHandle FaceBuilder::insert(HalfEdgeMesh &mesh, std::span<const VertexHandle> vertices,
                                std::span<const godot::Vector2> corner_uvs) {
@@ -45,11 +46,12 @@ FaceHandle FaceBuilder::run() {
    // Mutation phase - validation is complete and this topology op should not fail
    // past this point.
    mMesh.mHalfEdges.ensure_capacity(mMesh.mHalfEdges.size() + (mNewEdgeCount * 2));
+   mMesh.mFaces.ensure_capacity(mMesh.mFaces.size() + 1);
    const FaceHandle face = mMesh.mFaces.emplace(Face {});
    construct_edges(face);
    connect_topology(face);
 
-   Face *face_data = mMesh.mFaces.get(face);
+   Face *face_data = mMesh.mFaces.get_mut(face);
    assert(face_data != nullptr);
    face_data->boundary = mFaceEdges.front();
    return face;
@@ -142,8 +144,8 @@ void FaceBuilder::construct_edges(FaceHandle face) {
    for (std::size_t index = 0; index < mVertices.size(); ++index) {
       HalfEdgeHandle &face_edge = mFaceEdges[index];
       if (face_edge != HalfEdgeHandle {}) {
-         HalfEdge *half_edge = mMesh.mHalfEdges.get<HalfEdge>(face_edge);
-         godot::Vector2 *uv = mMesh.mHalfEdges.get<HalfEdgeUVTag>(face_edge);
+         HalfEdge *half_edge = mMesh.mHalfEdges.get_mut<HalfEdge>(face_edge);
+         godot::Vector2 *uv = mMesh.mHalfEdges.get_mut<HalfEdgeUVTag>(face_edge);
          assert(half_edge != nullptr && uv != nullptr);
          half_edge->face = face;
          *uv = mCornerUvs[index];
@@ -156,13 +158,13 @@ void FaceBuilder::construct_edges(FaceHandle face) {
       const HalfEdgeHandle twin = mMesh.mHalfEdges.emplace(
           HalfEdge {.origin = mVertices[next_index], .twin = face_edge}, godot::Vector2 {});
 
-      HalfEdge *half_edge = mMesh.mHalfEdges.get<HalfEdge>(face_edge);
+      HalfEdge *half_edge = mMesh.mHalfEdges.get_mut<HalfEdge>(face_edge);
       assert(half_edge != nullptr);
       half_edge->twin = twin;
    }
 }
 
-void FaceBuilder::connect_topology(FaceHandle face) noexcept {
+void FaceBuilder::connect_topology(FaceHandle face) {
    assert(mVertices.size() == mFaceEdges.size());
 
    // Repair the topology surrounding the new face. New face edges contribute
@@ -172,8 +174,8 @@ void FaceBuilder::connect_topology(FaceHandle face) noexcept {
       const std::size_t incoming_index = (index + mVertices.size() - 1) % mVertices.size();
       const HalfEdgeHandle incoming = mFaceEdges[incoming_index];
       const HalfEdgeHandle outgoing = mFaceEdges[index];
-      HalfEdge *incoming_data = mMesh.mHalfEdges.get<HalfEdge>(incoming);
-      HalfEdge *outgoing_data = mMesh.mHalfEdges.get<HalfEdge>(outgoing);
+      HalfEdge *incoming_data = mMesh.mHalfEdges.get_mut<HalfEdge>(incoming);
+      HalfEdge *outgoing_data = mMesh.mHalfEdges.get_mut<HalfEdge>(outgoing);
       assert(incoming_data != nullptr && outgoing_data != nullptr);
 
       const HalfEdge *incoming_twin = mMesh.mHalfEdges.get<HalfEdge>(incoming_data->twin);
@@ -190,7 +192,7 @@ void FaceBuilder::connect_topology(FaceHandle face) noexcept {
          mMesh.link_half_edges(outgoing_data->prev, incoming_data->twin);
       }
 
-      Vertex *vertex = mMesh.mVertices.get<Vertex>(mVertices[index]);
+      Vertex *vertex = mMesh.mVertices.get_mut<Vertex>(mVertices[index]);
       assert(vertex != nullptr);
       vertex->outgoing = outgoing;
    }
@@ -200,7 +202,7 @@ void FaceBuilder::connect_topology(FaceHandle face) noexcept {
    for (std::size_t index = 0; index < mFaceEdges.size(); ++index) {
       const std::size_t previous_index = (index + mFaceEdges.size() - 1) % mFaceEdges.size();
       const std::size_t next_index = (index + 1) % mFaceEdges.size();
-      HalfEdge *half_edge = mMesh.mHalfEdges.get<HalfEdge>(mFaceEdges[index]);
+      HalfEdge *half_edge = mMesh.mHalfEdges.get_mut<HalfEdge>(mFaceEdges[index]);
       assert(half_edge != nullptr);
       half_edge->prev = mFaceEdges[previous_index];
       half_edge->next = mFaceEdges[next_index];
@@ -216,15 +218,17 @@ bool FaceBuilder::generate_planar_uvs(std::span<godot::Vector2> corner_uvs) cons
    godot::Vector3 minimum;
    godot::Vector3 maximum;
 
-   const godot::Vector3 *first_position = mMesh.mVertices.get<VertexPositionTag>(mVertices.front());
+   const godot::Vector3 *first_position =
+       mMesh.mVertices.get<VertexPositionTag>(mVertices.front());
    if (first_position == nullptr) { return false; }
    minimum = *first_position;
    maximum = *first_position;
 
    for (std::size_t index = 0; index < mVertices.size(); ++index) {
-      const godot::Vector3 *current = mMesh.mVertices.get<VertexPositionTag>(mVertices[index]);
-      const godot::Vector3 *next =
-          mMesh.mVertices.get<VertexPositionTag>(mVertices[(index + 1) % mVertices.size()]);
+      const godot::Vector3 *current =
+          mMesh.mVertices.get<VertexPositionTag>(mVertices[index]);
+      const godot::Vector3 *next = mMesh.mVertices.get<VertexPositionTag>(
+          mVertices[(index + 1) % mVertices.size()]);
       if (current == nullptr || next == nullptr) { return false; }
 
       normal.x += (current->y - next->y) * (current->z + next->z);
@@ -261,7 +265,8 @@ bool FaceBuilder::generate_planar_uvs(std::span<godot::Vector2> corner_uvs) cons
    }
 
    for (std::size_t index = 0; index < mVertices.size(); ++index) {
-      const godot::Vector3 &position = *mMesh.mVertices.get<VertexPositionTag>(mVertices[index]);
+      const godot::Vector3 &position =
+          *mMesh.mVertices.get<VertexPositionTag>(mVertices[index]);
       switch (dropped_axis) {
          case DroppedAxis::X: corner_uvs[index] = {position.y, position.z}; break;
          case DroppedAxis::Y: corner_uvs[index] = {position.x, position.z}; break;

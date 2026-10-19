@@ -48,6 +48,8 @@ target_sources(${LIBNAME}
 		src/register_types.h
 		src/mesh/half_edge_mesh.cpp
 		src/mesh/half_edge_mesh.h
+		src/mesh/mesh_recording.cpp
+		src/mesh/mesh_recording.h
 		src/mesh/topology_iterators.hpp
 		src/mesh/topology_data.hpp
 		src/mesh/utils/face_builder.cpp

@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <random>
 #include <ranges>
+#include <span>
 #include <stdexcept>
 #include <string>
 #include <type_traits>
@@ -311,9 +312,16 @@ TEST_CASE("SlotMap rejects invalid and already removed handles", "[slot-map]") {
    CHECK(map.get(handle) == nullptr);
 }
 
-TEST_CASE("SlotMap provides mutable and const single-column access", "[slot-map]") {
+TEST_CASE("SlotMap provides explicit mutable and const single-column access", "[slot-map]") {
    IntMap map;
    const auto handle = map.emplace(10);
+   static_assert(std::is_same_v<decltype(map.get(handle)), const int *>);
+   static_assert(std::is_same_v<decltype(map.get_mut(handle)), int *>);
+   static_assert(std::is_same_v<decltype(map.data()), const int *>);
+   static_assert(std::is_same_v<decltype(map.data_mut()), int *>);
+   static_assert(std::is_same_v<decltype(map.values()), std::span<const int>>);
+   static_assert(std::is_same_v<decltype(map.values_mut()), std::span<int>>);
+   *map.get_mut(handle) = 15;
    map[handle] = 20;
 
    const IntMap &constMap = map;
@@ -366,7 +374,7 @@ TEST_CASE("SlotMap remains usable after moves", "[slot-map]") {
    const auto last = source.emplace(30);
    REQUIRE(source.remove(freeHandle));
 
-   int *firstPointer = source.get(first);
+   const int *firstPointer = source.get(first);
    auto sourceValues = source.values();
 
    IntMap moved(std::move(source));
@@ -383,7 +391,7 @@ TEST_CASE("SlotMap remains usable after moves", "[slot-map]") {
    const auto discarded = assigned.emplace(99);
    CHECK(handle_value(discarded) == 0);
 
-   int *movedFirstPointer = moved.get(first);
+   const int *movedFirstPointer = moved.get(first);
    assigned = std::move(moved);
    CHECK(moved.empty());
    CHECK(moved.slot_count() == 0);
@@ -423,7 +431,7 @@ TEST_CASE("SlotMap supports duplicate value types through distinct tags", "[slot
    CHECK(map.get<1>(handle) == map.get<PreviousPositionTag>(handle));
    CHECK(map.get<2>(handle) == map.get<Velocity>(handle));
 
-   auto [current, previous, velocity] = map.row(handle);
+   auto [current, previous, velocity] = map.row_mut(handle);
    current.value = 2;
    previous.value = 20;
    velocity.value = 200;

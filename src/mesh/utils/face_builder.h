@@ -32,7 +32,7 @@ class FaceBuilder final {
 
    void construct_edges(FaceHandle face);
 
-   void connect_topology(FaceHandle face) noexcept;
+   void connect_topology(FaceHandle face);
 
    [[nodiscard]] bool generate_planar_uvs(std::span<godot::Vector2> corner_uvs) const noexcept;
 
