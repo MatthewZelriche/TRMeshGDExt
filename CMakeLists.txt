@@ -1,6 +1,10 @@
 # CMake 3.20 added support for requesting C++23.
 cmake_minimum_required(VERSION 3.20)
 
+# MSVC names compiler outputs *.obj. Godot treats every .obj under res:// as a
+# Wavefront mesh, so keep this build tree out of the editor importer.
+file(WRITE "${CMAKE_BINARY_DIR}/.gdignore" "")
+
 # For clangd / Zed (Ninja generator). VS generators ignore this.
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
